@@ -1,0 +1,46 @@
+project: authorized-example
+target:
+  seeds:
+    - https://example.com
+  include_domains:
+    - example.com
+    - "*.example.com"
+  exclude_domains:
+    - billing.example.com
+  exclude_paths:
+    - /logout
+    - /delete-account
+  allowed_ports: [80, 443]
+  allow_private_networks: false
+
+authorization:
+  confirmed: false
+  reference: "REPLACE-WITH-PROGRAM-URL-OR-WRITTEN-AUTHORIZATION-ID"
+  authorized_by: "REPLACE-ME"
+  expires_at: "2026-12-31T23:59:59Z"
+
+scan:
+  max_requests: 250
+  max_pages_per_host: 40
+  max_depth: 3
+  concurrency: 4
+  requests_per_second: 1.5
+  timeout_seconds: 12
+  user_agent: "AegisBountyAI/0.1 authorized-security-research"
+  active_validation: false
+  discover_subdomains: false
+  use_nuclei: false
+  nuclei_severities: [info, low, medium, high, critical]
+
+ai:
+  enabled: false
+  provider: openai
+  triage_model: gpt-5.6-terra
+  reasoning_model: gpt-5.6-sol
+  max_observations: 25
+  redact_secrets: true
+
+output:
+  directory: runs
+  formats: [json, markdown, html]
+

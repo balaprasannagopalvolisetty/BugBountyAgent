@@ -1,0 +1,31 @@
+# Safe end-to-end example for a web app running only on this machine.
+project: local-lab-smoke-test
+target:
+  seeds: [http://127.0.0.1:8765]
+  include_domains: [127.0.0.1]
+  exclude_domains: []
+  exclude_paths: [/logout]
+  allowed_ports: [8765]
+  allow_private_networks: true
+authorization:
+  confirmed: true
+  reference: local-workspace-owner-smoke-test
+  authorized_by: Local workspace owner
+  expires_at: "2099-12-31T23:59:59Z"
+scan:
+  max_requests: 10
+  max_pages_per_host: 5
+  max_depth: 2
+  concurrency: 2
+  requests_per_second: 10
+  timeout_seconds: 5
+  user_agent: "AegisBountyAI/0.1 local-authorized-smoke-test"
+  active_validation: false
+  discover_subdomains: false
+  use_nuclei: false
+ai:
+  enabled: false
+output:
+  directory: ../runs/local-lab
+  formats: [json, markdown, html]
+
