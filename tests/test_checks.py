@@ -18,7 +18,12 @@ def exchange(**overrides: object) -> HttpExchange:
 
 
 def test_missing_headers_are_observations() -> None:
-    items = analyze_exchange(exchange())
+    items = analyze_exchange(
+        exchange(
+            response_headers={"content-type": "text/html; charset=utf-8"},
+            body_preview="<!doctype html><html></html>",
+        )
+    )
     titles = {item.title for item in items}
     assert "Missing Content-Security-Policy" in titles
     assert "Missing Strict-Transport-Security" in titles
@@ -33,6 +38,22 @@ def test_detects_stack_trace_and_technology_disclosure() -> None:
     )
     assert any(item.kind == "information_disclosure" for item in items)
     assert any(item.kind == "technology_disclosure" for item in items)
+
+
+def test_static_javascript_does_not_get_document_header_noise() -> None:
+    items = analyze_exchange(
+        exchange(
+            url="https://static.example.com/app.js",
+            response_headers={
+                "content-type": "application/javascript",
+                "strict-transport-security": "max-age=31536000",
+                "server": "AmazonS3",
+            },
+            body_preview="console.log('ok')",
+        )
+    )
+    assert not any(item.kind == "missing_security_header" for item in items)
+    assert not any(item.kind == "technology_disclosure" for item in items)
 
 
 def test_external_redirect_does_not_claim_open_redirect() -> None:

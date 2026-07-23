@@ -3,11 +3,16 @@ from __future__ import annotations
 import re
 from urllib.parse import urljoin, urlsplit
 
-from aegis_bounty.models import Confidence, HttpExchange, Observation, Severity
+from aegis_bounty.models import (
+    Confidence,
+    Exploitability,
+    HttpExchange,
+    Observation,
+    Severity,
+)
 
-SECURITY_HEADERS = {
+DOCUMENT_SECURITY_HEADERS = {
     "content-security-policy": ("Content-Security-Policy", Severity.LOW),
-    "strict-transport-security": ("Strict-Transport-Security", Severity.LOW),
     "x-content-type-options": ("X-Content-Type-Options", Severity.INFO),
     "referrer-policy": ("Referrer-Policy", Severity.INFO),
 }
@@ -30,10 +35,34 @@ def analyze_exchange(exchange: HttpExchange) -> list[Observation]:
     observations: list[Observation] = []
     headers = {key.lower(): value for key, value in exchange.response_headers.items()}
     url_parts = urlsplit(exchange.url)
+    media_type = headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    preview = exchange.body_preview.lstrip()[:1_000].lower()
+    is_document = media_type in {"text/html", "application/xhtml+xml"} or preview.startswith(
+        ("<!doctype html", "<html")
+    )
 
     if url_parts.scheme == "https":
-        for header, (display, severity) in SECURITY_HEADERS.items():
-            if header not in headers:
+        if "strict-transport-security" not in headers:
+            observations.append(
+                Observation(
+                    kind="missing_security_header",
+                    title="Missing Strict-Transport-Security",
+                    url=exchange.url,
+                    severity=Severity.LOW,
+                    confidence=Confidence.STRONG,
+                    exploitability=Exploitability.UNDEMONSTRATED,
+                    evidence=(
+                        f"HTTPS response {exchange.request_id} did not include "
+                        "Strict-Transport-Security. This is a host-level hardening signal."
+                    ),
+                    remediation="Evaluate and deploy an appropriate Strict-Transport-Security policy.",
+                    request_id=exchange.request_id,
+                )
+            )
+        if is_document:
+            for header, (display, severity) in DOCUMENT_SECURITY_HEADERS.items():
+                if header in headers:
+                    continue
                 observations.append(
                     Observation(
                         kind="missing_security_header",
@@ -41,7 +70,11 @@ def analyze_exchange(exchange: HttpExchange) -> list[Observation]:
                         url=exchange.url,
                         severity=severity,
                         confidence=Confidence.STRONG,
-                        evidence=f"Response {exchange.request_id} did not include {display}.",
+                        exploitability=Exploitability.UNDEMONSTRATED,
+                        evidence=(
+                            f"HTML document response {exchange.request_id} did not include {display}. "
+                            "No exploitability is established by absence alone."
+                        ),
                         remediation=f"Evaluate and deploy an appropriate {display} policy.",
                         request_id=exchange.request_id,
                     )
@@ -49,7 +82,8 @@ def analyze_exchange(exchange: HttpExchange) -> list[Observation]:
 
     server = headers.get("server")
     powered_by = headers.get("x-powered-by")
-    if server or powered_by:
+    versioned_server = bool(server and re.search(r"(?:/|\s)v?\d+(?:\.\d+)+", server))
+    if powered_by or versioned_server:
         disclosed = "; ".join(
             filter(
                 None,
@@ -66,6 +100,7 @@ def analyze_exchange(exchange: HttpExchange) -> list[Observation]:
                 url=exchange.url,
                 severity=Severity.INFO,
                 confidence=Confidence.STRONG,
+                exploitability=Exploitability.UNLIKELY,
                 evidence=disclosed,
                 remediation="Remove unnecessary version and framework disclosure from response headers.",
                 request_id=exchange.request_id,
@@ -84,6 +119,7 @@ def analyze_exchange(exchange: HttpExchange) -> list[Observation]:
                     url=exchange.url,
                     severity=Severity.LOW,
                     confidence=Confidence.STRONG,
+                    exploitability=Exploitability.UNDEMONSTRATED,
                     evidence=f"Redacted Set-Cookie metadata from {exchange.request_id}: {set_cookie}",
                     remediation="Mark cookies transported over HTTPS as Secure.",
                     request_id=exchange.request_id,
@@ -97,6 +133,7 @@ def analyze_exchange(exchange: HttpExchange) -> list[Observation]:
                     url=exchange.url,
                     severity=Severity.LOW,
                     confidence=Confidence.MODERATE,
+                    exploitability=Exploitability.UNDEMONSTRATED,
                     evidence=f"Redacted Set-Cookie metadata from {exchange.request_id}: {set_cookie}",
                     remediation="Mark non-script-readable session and authentication cookies as HttpOnly.",
                     request_id=exchange.request_id,
@@ -110,6 +147,7 @@ def analyze_exchange(exchange: HttpExchange) -> list[Observation]:
                     url=exchange.url,
                     severity=Severity.INFO,
                     confidence=Confidence.STRONG,
+                    exploitability=Exploitability.UNDEMONSTRATED,
                     evidence=f"Redacted Set-Cookie metadata from {exchange.request_id}: {set_cookie}",
                     remediation="Set SameSite=Lax or Strict unless a reviewed cross-site flow requires None.",
                     request_id=exchange.request_id,
@@ -125,6 +163,7 @@ def analyze_exchange(exchange: HttpExchange) -> list[Observation]:
                 url=exchange.url,
                 severity=Severity.LOW,
                 confidence=Confidence.MODERATE,
+                exploitability=Exploitability.UNLIKELY,
                 evidence="Access-Control-Allow-Origin: * with Access-Control-Allow-Credentials: true",
                 remediation="Use an explicit allowlist and never combine wildcard origins with credentials.",
                 request_id=exchange.request_id,
@@ -142,6 +181,11 @@ def analyze_exchange(exchange: HttpExchange) -> list[Observation]:
                     url=exchange.url,
                     severity=Severity.MEDIUM if label == "private key" else Severity.LOW,
                     confidence=Confidence.STRONG,
+                    exploitability=(
+                        Exploitability.PLAUSIBLE
+                        if label == "private key"
+                        else Exploitability.UNDEMONSTRATED
+                    ),
                     evidence=f"Matched in response {exchange.request_id}: {sample}",
                     remediation="Return generic client-facing errors and keep secrets and diagnostics server-side.",
                     request_id=exchange.request_id,
@@ -156,6 +200,7 @@ def analyze_exchange(exchange: HttpExchange) -> list[Observation]:
                 url=exchange.url,
                 severity=Severity.INFO,
                 confidence=Confidence.MODERATE,
+                exploitability=Exploitability.UNDEMONSTRATED,
                 evidence=f"{url_parts.path} returned HTTP {exchange.status_code}.",
                 remediation="Confirm the endpoint is intended to be public and restrict sensitive schemas or consoles.",
                 request_id=exchange.request_id,
@@ -174,6 +219,7 @@ def analyze_exchange(exchange: HttpExchange) -> list[Observation]:
                     url=exchange.url,
                     severity=Severity.INFO,
                     confidence=Confidence.MODERATE,
+                    exploitability=Exploitability.UNDEMONSTRATED,
                     evidence=f"Location points to {destination}. This alone does not prove an open redirect.",
                     remediation="Ensure redirect destinations are fixed or validated against a strict allowlist.",
                     request_id=exchange.request_id,
@@ -198,6 +244,9 @@ def analyze_active_cors(
             url=baseline.url,
             severity=severity,
             confidence=Confidence.STRONG,
+            exploitability=Exploitability.PLAUSIBLE
+            if credentials
+            else Exploitability.UNDEMONSTRATED,
             evidence=(
                 f"Probe {probe.request_id} sent Origin: {origin}; response allowed that origin"
                 + (" with credentials." if credentials else ".")

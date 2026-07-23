@@ -4,12 +4,12 @@ Aegis is a scope-locked, evidence-first assistant for **authorized** web securit
 
 It is intentionally not an autonomous exploitation framework. It does not submit forms, mutate state, brute-force credentials, evade WAFs, fetch cloud metadata, generate weaponized deserialization payloads, or claim that an LLM observation proves a vulnerability. Those actions are too risky to make a safe default and frequently violate bounty rules.
 
-## What works in v0.1
+## What works in v0.2
 
 - Exact-domain and wildcard scope rules, excluded hosts/paths, port allowlists, authorization expiry, and public-IP enforcement
 - DNS/IP preflight checks before each network request
 - Async crawl of links, forms, scripts, redirects, and likely endpoints found in JavaScript
-- Passive header, cookie, disclosure, CORS, redirect, and exposed-document observations
+- Content-aware header, cookie, disclosure, CORS, redirect, and exposed-document observations
 - Opt-in, read-only active CORS validation
 - Optional `subfinder` / `amass` discovery and Nuclei adapter, with all results re-filtered through scope
 - SQLite evidence ledger and deterministic deduplication
@@ -17,26 +17,37 @@ It is intentionally not an autonomous exploitation framework. It does not submit
 - Rule-based chain hypotheses for analyst review
 - JSON, Markdown, and standalone HTML reports
 - Request budgets, concurrency limits, per-host rate limiting, and a descriptive user agent
+- Separate detection-confidence and exploitability labels
+- Host-policy deduplication and suppression of document-header noise on static assets
+- A safety-classified catalog for common bug bounty tools and research collections
 
 ## Install
+
+Kali Linux, Debian, or Ubuntu:
+
+```bash
+sudo apt update
+sudo apt install -y python3-full python3-venv
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e '.[dev]'
+cp configs/example.yaml scope.yaml
+```
+
+Windows PowerShell:
 
 ```powershell
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 python -m pip install -e ".[dev]"
-```
-
-Copy the example configuration and fill in the program scope and authorization metadata:
-
-```powershell
 Copy-Item configs\example.yaml scope.yaml
 ```
 
-`authorization.confirmed` must be `true`, the reference and authorizer must be filled in, and the authorization must not be expired. Aegis refuses to scan otherwise.
+Fill in the actual program scope and authorization metadata. `authorization.confirmed` must be `true`, the reference and authorizer must be genuine, and the authorization must not be expired. Aegis refuses to scan otherwise. Do not use `--break-system-packages` on Kali; use the virtual environment.
 
 ## Use
 
-```powershell
+```bash
 aegis validate scope.yaml
 aegis doctor
 aegis scan scope.yaml
@@ -46,10 +57,10 @@ To enable AI triage, set `ai.enabled: true` and provide `OPENAI_API_KEY` in the 
 
 Useful commands:
 
-```powershell
+```bash
 aegis scan scope.yaml --dry-run
 aegis scan scope.yaml --no-ai
-aegis report runs\<scan-id>\evidence.sqlite3
+aegis report runs/<scan-id>/evidence.sqlite3
 ```
 
 ## Pipeline
@@ -66,6 +77,28 @@ aegis report runs\<scan-id>\evidence.sqlite3
 ## External tools
 
 External tools are optional. If installed, discovery supports `subfinder` and `amass`. Nuclei is disabled unless `scan.use_nuclei` is true. Aegis passes only explicit arguments, applies its rate limit, and imports only in-scope results. You remain responsible for reviewing selected templates against each program's rules.
+
+Inspect the complete catalog and local installation status with:
+
+```powershell
+aegis tools
+aegis tools --json
+```
+
+| Project | Role in Aegis | Automatic execution |
+| --- | --- | --- |
+| [PayloadsAllTheThings](https://github.com/swisskyrepo/PayloadsAllTheThings) | Analyst reference corpus | Never |
+| [dirsearch](https://github.com/maurosoria/dirsearch) | External active path discovery | Never |
+| [subfinder](https://github.com/projectdiscovery/subfinder) | Integrated passive subdomain discovery | Only when `discover_subdomains` is enabled |
+| [NahamSec beginner resources](https://github.com/nahamsec/Resources-for-Beginner-Bug-Bounty-Hunters) | Learning reference | Never |
+| [reconFTW](https://github.com/six2dez/reconftw) | Broad external orchestrator | Never |
+| [AllAboutBugBounty](https://github.com/daffainfo/AllAboutBugBounty) | Analyst reference | Never |
+| [Osmedeus](https://github.com/j3ssie/osmedeus) | Broad external orchestrator | Never |
+| [APKLeaks](https://github.com/dwisiswant0/apkleaks) | External local APK analysis | Never |
+| [scan4all](https://github.com/GhostTroops/scan4all) | High-impact external framework | Never |
+| [awesome-bugbounty-tools](https://github.com/vavkamil/awesome-bugbounty-tools) | Curated tool index | Never |
+
+`dirsearch`, reconFTW, Osmedeus, and scan4all can generate traffic outside Aegis request accounting or invoke intrusive modules. They are deliberately not launched by `aegis scan`. Payload and learning repositories are not vendored or treated as executable input.
 
 ## Development
 

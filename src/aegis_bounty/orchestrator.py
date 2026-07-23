@@ -16,6 +16,7 @@ from aegis_bounty.recon import NucleiAdapter, ReconEngine
 from aegis_bounty.reporting import write_reports
 from aegis_bounty.scope import ScopePolicy
 from aegis_bounty.storage import EvidenceStore
+from aegis_bounty.triage import collapse_host_observations
 
 
 def create_scan_id(now: datetime | None = None) -> str:
@@ -92,7 +93,7 @@ class ScanOrchestrator:
                 errors.extend(crawl.errors)
                 for exchange in crawl.exchanges:
                     store.add_exchange(scan_id, exchange)
-                store.add_observations(scan_id, crawl.observations)
+                store.add_observations(scan_id, collapse_host_observations(crawl.observations))
 
                 if self.config.scan.use_nuclei:
                     adapter = NucleiAdapter(

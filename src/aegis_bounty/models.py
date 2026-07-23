@@ -33,12 +33,21 @@ class Confidence(StrEnum):
     CONFIRMED = "confirmed"
 
 
+class Exploitability(StrEnum):
+    UNDEMONSTRATED = "undemonstrated"
+    UNLIKELY = "unlikely"
+    PLAUSIBLE = "plausible"
+    LIKELY = "likely"
+    CONFIRMED = "confirmed"
+
+
 class Observation(BaseModel):
     kind: str
     title: str
     url: str
     severity: Severity = Severity.INFO
     confidence: Confidence = Confidence.TENTATIVE
+    exploitability: Exploitability = Exploitability.UNDEMONSTRATED
     evidence: str
     remediation: str = "Review the affected behavior and apply defense in depth."
     source: str = "aegis"

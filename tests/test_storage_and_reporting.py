@@ -27,4 +27,7 @@ def test_store_deduplicates_and_writes_reports(tmp_path: Path) -> None:
     paths = write_reports(store, "scan1", tmp_path / "reports", ["json", "markdown", "html"])
     store.close()
     assert {path.name for path in paths} == {"report.json", "report.md", "report.html"}
-    assert "human validation" in (tmp_path / "reports" / "report.md").read_text(encoding="utf-8")
+    report = (tmp_path / "reports" / "report.md").read_text(encoding="utf-8")
+    assert "human validation" in report
+    assert "Detection confidence" in report
+    assert "Exploitability" in report

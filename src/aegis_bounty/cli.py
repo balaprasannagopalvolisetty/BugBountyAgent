@@ -17,6 +17,7 @@ from aegis_bounty.config import load_config
 from aegis_bounty.orchestrator import ScanOrchestrator
 from aegis_bounty.reporting import write_reports
 from aegis_bounty.storage import EvidenceStore
+from aegis_bounty.tool_catalog import TOOL_CATALOG, executable_tools
 
 app = typer.Typer(
     name="aegis",
@@ -52,9 +53,16 @@ def doctor() -> None:
     table.add_column("Capability")
     table.add_column("Status")
     table.add_column("Details")
-    for tool in ("subfinder", "amass", "nuclei"):
-        path = shutil.which(tool)
-        table.add_row(tool, "ready" if path else "optional", path or "not installed")
+    for executable in ("amass", "nuclei"):
+        path = shutil.which(executable)
+        table.add_row(executable, "ready" if path else "optional", path or "not installed")
+    for tool in executable_tools():
+        path = tool.installed_path()
+        table.add_row(
+            tool.name,
+            "ready" if path else tool.integration.value,
+            path or "not installed",
+        )
     key = bool(os.environ.get("OPENAI_API_KEY"))
     table.add_row(
         "OpenAI",
@@ -62,6 +70,38 @@ def doctor() -> None:
         "OPENAI_API_KEY set" if key else "AI triage disabled without key",
     )
     console.print(table)
+
+
+@app.command("tools")
+def tools_command(
+    as_json: Annotated[
+        bool, typer.Option("--json", help="Emit the catalog as machine-readable JSON.")
+    ] = False,
+) -> None:
+    """List requested security tools, integration status, and safety posture."""
+    if as_json:
+        console.print_json(json.dumps([tool.as_json() for tool in TOOL_CATALOG]))
+        return
+    table = Table(title="Aegis external tool catalog")
+    table.add_column("Tool")
+    table.add_column("Kind")
+    table.add_column("Integration")
+    table.add_column("Installed")
+    table.add_column("Purpose")
+    for tool in TOOL_CATALOG:
+        installed = tool.installed_path()
+        table.add_row(
+            tool.name,
+            tool.kind.value,
+            tool.integration.value,
+            installed or ("n/a" if tool.executable is None else "no"),
+            tool.purpose,
+        )
+    console.print(table)
+    console.print(
+        "[yellow]External and not-auto-run tools are never launched by `aegis scan`. "
+        "Their own traffic and workflow settings remain the operator's responsibility.[/yellow]"
+    )
 
 
 @app.command()

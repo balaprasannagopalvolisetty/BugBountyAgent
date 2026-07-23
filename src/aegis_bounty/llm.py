@@ -8,7 +8,7 @@ from openai import AsyncOpenAI
 from pydantic import BaseModel, Field, ValidationError
 
 from aegis_bounty.config import AIConfig
-from aegis_bounty.models import Confidence, Observation, Severity
+from aegis_bounty.models import Confidence, Exploitability, Observation, Severity
 
 SECRET_PATTERNS = (
     re.compile(r"(?i)(authorization\s*[:=]\s*(?:bearer|basic)\s+)[^\s,;]+"),
@@ -33,6 +33,7 @@ class AITriageItem(BaseModel):
     assessment: str
     severity: Severity
     confidence: Confidence
+    exploitability: Exploitability = Exploitability.UNDEMONSTRATED
     rationale: str
     safe_validation: list[str] = Field(default_factory=list, max_length=5)
 
@@ -103,6 +104,7 @@ class OpenAITriage:
                     url=original.url,
                     severity=triage_item.severity,
                     confidence=triage_item.confidence,
+                    exploitability=triage_item.exploitability,
                     evidence=(
                         f"Assessment: {triage_item.assessment}\nRationale: {triage_item.rationale}\n"
                         + "Safe validation: "
