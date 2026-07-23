@@ -1,4 +1,4 @@
-# Aegis Bounty AI
+# BugBountyAgent — Aegis Bounty AI
 
 Aegis is a scope-locked, evidence-first assistant for **authorized** web security assessments and bug bounty programs. It maps a permitted attack surface, performs low-impact checks, optionally triages captured evidence with an LLM, proposes hypotheses for human validation, and produces reproducible reports.
 
