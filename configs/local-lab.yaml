@@ -19,7 +19,7 @@ scan:
   concurrency: 2
   requests_per_second: 10
   timeout_seconds: 5
-  user_agent: "AegisBountyAI/0.3 local-authorized-smoke-test"
+  user_agent: "AegisBountyAI/0.4 local-authorized-smoke-test"
   active_validation: false
   discover_subdomains: false
   use_nuclei: false

@@ -16,7 +16,12 @@ from rich.console import Console
 from rich.table import Table
 
 from aegis_bounty import __version__
-from aegis_bounty.config import load_config
+from aegis_bounty.authorization import (
+    AuthorizationProfile,
+    load_authorization,
+    save_authorization,
+)
+from aegis_bounty.config import AppConfig, AuthorizationConfig, TargetConfig, load_config
 from aegis_bounty.orchestrator import ScanOrchestrator
 from aegis_bounty.reporting import write_reports
 from aegis_bounty.scope import ScopeViolation, normalize_url
@@ -37,6 +42,68 @@ def _load(path: Path):  # type: ignore[no-untyped-def]
     except (ValueError, ValidationError) as exc:
         console.print(f"[bold red]Configuration refused:[/bold red] {exc}")
         raise typer.Exit(2) from exc
+
+
+def _prompt_and_save_authorization(hostname: str) -> AuthorizationProfile:
+    console.print(
+        f"[bold]One-time authorization setup for exact host {hostname}[/bold]\n"
+        "Aegis cannot independently verify permission; enter the real program or written authorization."
+    )
+    reference = typer.prompt("Program URL or written authorization reference")
+    authorized_by = typer.prompt("Authorizing program or organization")
+    expires_at = typer.prompt("Authorization expiration (ISO 8601, e.g. 2026-12-31T23:59:59Z)")
+    confirmed = typer.confirm(
+        f"I confirm I am authorized to assess {hostname} under that reference",
+        default=False,
+    )
+    try:
+        authorization = AuthorizationConfig.model_validate(
+            {
+                "confirmed": confirmed,
+                "reference": reference,
+                "authorized_by": authorized_by,
+                "expires_at": expires_at,
+            }
+        )
+    except ValidationError as exc:
+        console.print(f"[bold red]Authorization refused:[/bold red] {exc}")
+        raise typer.Exit(2) from exc
+    profile = AuthorizationProfile(hostname=hostname, authorization=authorization)
+    path = save_authorization(profile)
+    console.print(f"[green]Saved exact-host authorization profile:[/green] {path}")
+    return profile
+
+
+def _authorization_for(hostname: str, reauthorize: bool = False) -> AuthorizationProfile:
+    if not reauthorize:
+        try:
+            profile = load_authorization(hostname)
+        except (ValueError, ValidationError) as exc:
+            console.print(f"[yellow]Stored authorization cannot be used: {exc}[/yellow]")
+        else:
+            if profile is not None:
+                return profile
+    return _prompt_and_save_authorization(hostname)
+
+
+def _run_orchestrator(orchestrator: ScanOrchestrator, parsed: AppConfig, no_ai: bool) -> None:
+    console.print(
+        f"[bold cyan]Starting authorized assessment[/bold cyan] for {parsed.project} "
+        f"(budget: {parsed.scan.max_requests} requests, "
+        f"{parsed.scan.requests_per_second:g} req/s/host)"
+    )
+    try:
+        summary = asyncio.run(orchestrator.run(disable_ai=no_ai))
+    except KeyboardInterrupt as exc:
+        console.print("[yellow]Stopped by operator.[/yellow]")
+        raise typer.Exit(130) from exc
+    console.print(f"[bold green]Completed scan {summary.scan_id}[/bold green]")
+    console.print(
+        f"Assets {summary.assets} | Endpoints {summary.endpoints} | Requests {summary.requests} | "
+        f"Observations {summary.observations} | Chain hypotheses {summary.chains}"
+    )
+    for path in summary.report_paths:
+        console.print(f"  {path}")
 
 
 @app.command("init-target")
@@ -92,7 +159,7 @@ def init_target(
             "concurrency": 4,
             "requests_per_second": 1.5,
             "timeout_seconds": 12,
-            "user_agent": "AegisBountyAI/0.3 authorized-security-research",
+            "user_agent": "AegisBountyAI/0.4 authorized-security-research",
             "active_validation": False,
             "discover_subdomains": False,
             "use_nuclei": False,
@@ -115,6 +182,56 @@ def init_target(
     console.print(
         f"Complete the authorization section, then run: [cyan]aegis validate {output}[/cyan]"
     )
+
+
+@app.command("authorize")
+def authorize_target(
+    target: Annotated[str, typer.Argument(help="Exact HTTP(S) target URL to authorize.")],
+) -> None:
+    """Create or replace a stored exact-host authorization profile."""
+    try:
+        normalized = normalize_url(target)
+    except (ScopeViolation, ValueError) as exc:
+        console.print(f"[bold red]Invalid target URL:[/bold red] {exc}")
+        raise typer.Exit(2) from exc
+    hostname = urlsplit(normalized).hostname
+    if not hostname:
+        raise typer.Exit(2)
+    _prompt_and_save_authorization(hostname)
+
+
+@app.command("scan-url")
+def scan_url(
+    target: Annotated[str, typer.Argument(help="One authorized HTTP(S) target URL.")],
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Print the derived plan without network access.")
+    ] = False,
+    no_ai: Annotated[bool, typer.Option("--no-ai", help="Disable AI triage.")] = False,
+    reauthorize: Annotated[
+        bool,
+        typer.Option("--reauthorize", help="Replace the stored authorization for this host."),
+    ] = False,
+) -> None:
+    """Scan one URL directly, prompting for authorization only on first use."""
+    try:
+        normalized = normalize_url(target)
+    except (ScopeViolation, ValueError) as exc:
+        console.print(f"[bold red]Invalid target URL:[/bold red] {exc}")
+        raise typer.Exit(2) from exc
+    hostname = urlsplit(normalized).hostname
+    if not hostname:
+        raise typer.Exit(2)
+    profile = _authorization_for(hostname, reauthorize)
+    parsed = AppConfig(
+        project=hostname,
+        target=TargetConfig(seeds=[normalized]),
+        authorization=profile.authorization,
+    )
+    orchestrator = ScanOrchestrator(parsed, Path.cwd())
+    if dry_run:
+        console.print_json(json.dumps(orchestrator.dry_run()))
+        return
+    _run_orchestrator(orchestrator, parsed, no_ai)
 
 
 @app.command()
@@ -200,22 +317,7 @@ def scan(
     if dry_run:
         console.print_json(json.dumps(orchestrator.dry_run()))
         return
-    console.print(
-        f"[bold cyan]Starting authorized assessment[/bold cyan] for {parsed.project} "
-        f"(budget: {parsed.scan.max_requests} requests, {parsed.scan.requests_per_second:g} req/s/host)"
-    )
-    try:
-        summary = asyncio.run(orchestrator.run(disable_ai=no_ai))
-    except KeyboardInterrupt as exc:
-        console.print("[yellow]Stopped by operator.[/yellow]")
-        raise typer.Exit(130) from exc
-    console.print(f"[bold green]Completed scan {summary.scan_id}[/bold green]")
-    console.print(
-        f"Assets {summary.assets} | Endpoints {summary.endpoints} | Requests {summary.requests} | "
-        f"Observations {summary.observations} | Chain hypotheses {summary.chains}"
-    )
-    for path in summary.report_paths:
-        console.print(f"  {path}")
+    _run_orchestrator(orchestrator, parsed, no_ai)
 
 
 @app.command("report")

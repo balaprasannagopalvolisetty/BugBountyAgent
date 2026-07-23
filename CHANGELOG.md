@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0 — 2026-07-23
+
+- Add `aegis scan-url URL` for direct scanning without YAML editing.
+- Prompt for authorization metadata once per exact hostname and store it under `~/.aegis/authorizations/`.
+- Reuse a valid stored profile on later scans so the URL is the only recurring input.
+- Add `aegis authorize URL` and `scan-url --reauthorize` for profile renewal.
+
 ## 0.3.0 — 2026-07-23
 
 - Add `aegis init-target URL` for a single-URL input workflow.

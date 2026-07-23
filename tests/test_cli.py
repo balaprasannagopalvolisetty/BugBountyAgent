@@ -27,3 +27,47 @@ def test_init_target_refuses_overwrite_without_force(tmp_path: Path) -> None:
     result = runner.invoke(app, ["init-target", "https://example.com", "-o", str(output)])
     assert result.exit_code == 2
     assert output.read_text(encoding="utf-8") == "keep"
+
+
+def test_scan_url_prompts_once_then_reuses_exact_host_profile(tmp_path: Path) -> None:
+    env = {"AEGIS_CONFIG_HOME": str(tmp_path / "aegis-home")}
+    answers = "https://program.example/scope\nExample Security\n2099-12-31T23:59:59Z\ny\n"
+    first = runner.invoke(
+        app,
+        ["scan-url", "https://vast.ai/", "--dry-run"],
+        input=answers,
+        env=env,
+    )
+    assert first.exit_code == 0
+    assert '"seeds": [\n    "https://vast.ai/"' in first.stdout
+    assert '"include_domains": [\n    "vast.ai"' in first.stdout
+    assert "Saved exact-host authorization profile" in first.stdout
+
+    second = runner.invoke(
+        app,
+        ["scan-url", "https://vast.ai/", "--dry-run"],
+        env=env,
+    )
+    assert second.exit_code == 0
+    assert "One-time authorization setup" not in second.stdout
+
+
+def test_stored_authorization_is_bound_to_exact_hostname(tmp_path: Path) -> None:
+    env = {"AEGIS_CONFIG_HOME": str(tmp_path / "aegis-home")}
+    answers = "program-ref\nExample Security\n2099-12-31T23:59:59Z\ny\n"
+    first = runner.invoke(
+        app,
+        ["scan-url", "https://vast.ai/", "--dry-run"],
+        input=answers,
+        env=env,
+    )
+    assert first.exit_code == 0
+
+    other = runner.invoke(
+        app,
+        ["scan-url", "https://cloud.vast.ai/", "--dry-run"],
+        input="new-program-ref\nExample Security\n2099-12-31T23:59:59Z\nn\n",
+        env=env,
+    )
+    assert other.exit_code == 2
+    assert "One-time authorization setup for exact host cloud.vast.ai" in other.stdout

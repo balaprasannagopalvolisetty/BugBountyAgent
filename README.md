@@ -47,15 +47,20 @@ Fill in the actual program scope and authorization metadata. `authorization.conf
 
 ## Use
 
-Start from one URL. Aegis derives only its exact hostname; it does not automatically include subdomains:
+Scan directly from one URL. On first use for a hostname, Aegis asks for the real authorization details in the terminal and stores them in `~/.aegis/authorizations/`. No YAML editing is required:
+
+```bash
+aegis scan-url https://vast.ai/ --dry-run
+aegis scan-url https://vast.ai/ --no-ai
+```
+
+Later scans of the same exact hostname need only the URL. Use `--reauthorize` when the program reference or expiration changes. Aegis derives only the exact hostname and never silently expands it to wildcard subdomains.
+
+The YAML workflow remains available for engagements that need custom exclusions, wildcard scope, rate limits, or other settings:
 
 ```bash
 aegis init-target https://vast.ai/ --output scope.yaml
-```
-
-Open `scope.yaml`, complete the genuine authorization reference, authorizer, and expiration, and set `confirmed: true`. Then:
-
-```bash
+# Complete the authorization section once for this custom configuration.
 aegis validate scope.yaml
 aegis doctor
 aegis scan scope.yaml
