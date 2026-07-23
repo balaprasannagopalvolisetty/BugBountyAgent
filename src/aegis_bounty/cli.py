@@ -4,10 +4,13 @@ import asyncio
 import json
 import os
 import shutil
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Annotated
+from urllib.parse import urlsplit
 
 import typer
+import yaml
 from pydantic import ValidationError
 from rich.console import Console
 from rich.table import Table
@@ -16,6 +19,7 @@ from aegis_bounty import __version__
 from aegis_bounty.config import load_config
 from aegis_bounty.orchestrator import ScanOrchestrator
 from aegis_bounty.reporting import write_reports
+from aegis_bounty.scope import ScopeViolation, normalize_url
 from aegis_bounty.storage import EvidenceStore
 from aegis_bounty.tool_catalog import TOOL_CATALOG, executable_tools
 
@@ -33,6 +37,84 @@ def _load(path: Path):  # type: ignore[no-untyped-def]
     except (ValueError, ValidationError) as exc:
         console.print(f"[bold red]Configuration refused:[/bold red] {exc}")
         raise typer.Exit(2) from exc
+
+
+@app.command("init-target")
+def init_target(
+    target: Annotated[str, typer.Argument(help="One authorized HTTP(S) target URL.")],
+    output: Annotated[
+        Path, typer.Option("--output", "-o", help="Configuration file to create.")
+    ] = Path("scope.yaml"),
+    force: Annotated[
+        bool, typer.Option("--force", help="Replace an existing output file.")
+    ] = False,
+) -> None:
+    """Create a locked exact-host configuration from one target URL."""
+    try:
+        normalized = normalize_url(target)
+    except (ScopeViolation, ValueError) as exc:
+        console.print(f"[bold red]Invalid target URL:[/bold red] {exc}")
+        raise typer.Exit(2) from exc
+    hostname = urlsplit(normalized).hostname
+    if not hostname:  # normalize_url already enforces this; retained for type narrowing.
+        raise typer.Exit(2)
+    if output.exists() and not force:
+        console.print(
+            f"[bold red]Refusing to overwrite {output}.[/bold red] Use --force intentionally."
+        )
+        raise typer.Exit(2)
+    target_port = urlsplit(normalized).port
+    allowed_ports = [80, 443]
+    if target_port is not None and target_port not in allowed_ports:
+        allowed_ports.append(target_port)
+        allowed_ports.sort()
+    expires = (datetime.now(UTC) + timedelta(days=30)).replace(microsecond=0)
+    starter = {
+        "project": hostname,
+        "target": {
+            "seeds": [normalized],
+            # include_domains is deliberately omitted; TargetConfig derives this exact host.
+            "exclude_domains": [],
+            "exclude_paths": ["/logout", "/delete-account"],
+            "allowed_ports": allowed_ports,
+            "allow_private_networks": False,
+        },
+        "authorization": {
+            "confirmed": False,
+            "reference": "REPLACE-WITH-PROGRAM-URL-OR-WRITTEN-AUTHORIZATION-ID",
+            "authorized_by": "REPLACE-ME",
+            "expires_at": expires.isoformat().replace("+00:00", "Z"),
+        },
+        "scan": {
+            "max_requests": 250,
+            "max_pages_per_host": 40,
+            "max_depth": 3,
+            "concurrency": 4,
+            "requests_per_second": 1.5,
+            "timeout_seconds": 12,
+            "user_agent": "AegisBountyAI/0.3 authorized-security-research",
+            "active_validation": False,
+            "discover_subdomains": False,
+            "use_nuclei": False,
+            "nuclei_severities": ["info", "low", "medium", "high", "critical"],
+        },
+        "ai": {
+            "enabled": False,
+            "provider": "openai",
+            "triage_model": "gpt-5.6-terra",
+            "reasoning_model": "gpt-5.6-sol",
+            "max_observations": 25,
+            "redact_secrets": True,
+        },
+        "output": {"directory": "runs", "formats": ["json", "markdown", "html"]},
+    }
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(yaml.safe_dump(starter, sort_keys=False), encoding="utf-8")
+    console.print(f"[bold green]Created exact-host configuration:[/bold green] {output}")
+    console.print(f"Target: {normalized}\nDerived scope: {hostname} (no wildcard subdomains)")
+    console.print(
+        f"Complete the authorization section, then run: [cyan]aegis validate {output}[/cyan]"
+    )
 
 
 @app.command()

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0 — 2026-07-23
+
+- Add `aegis init-target URL` for a single-URL input workflow.
+- Derive an exact-host include rule when `include_domains` is omitted.
+- Never expand a single URL to wildcard subdomains automatically.
+- Keep authorization metadata and validation mandatory before scanning.
+
 ## 0.2.0 — 2026-07-23
 
 - Apply CSP, Referrer-Policy, and `X-Content-Type-Options` checks only to HTML documents.

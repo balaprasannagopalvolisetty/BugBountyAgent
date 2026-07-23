@@ -47,6 +47,14 @@ Fill in the actual program scope and authorization metadata. `authorization.conf
 
 ## Use
 
+Start from one URL. Aegis derives only its exact hostname; it does not automatically include subdomains:
+
+```bash
+aegis init-target https://vast.ai/ --output scope.yaml
+```
+
+Open `scope.yaml`, complete the genuine authorization reference, authorizer, and expiration, and set `confirmed: true`. Then:
+
 ```bash
 aegis validate scope.yaml
 aegis doctor

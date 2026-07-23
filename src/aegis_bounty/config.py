@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlsplit
 
 import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -36,11 +37,28 @@ class AuthorizationConfig(BaseModel):
 
 class TargetConfig(BaseModel):
     seeds: list[str] = Field(min_length=1)
-    include_domains: list[str] = Field(min_length=1)
+    include_domains: list[str] = Field(default_factory=list)
     exclude_domains: list[str] = Field(default_factory=list)
     exclude_paths: list[str] = Field(default_factory=list)
     allowed_ports: list[int] = Field(default_factory=lambda: [80, 443])
     allow_private_networks: bool = False
+
+    @model_validator(mode="after")
+    def derive_exact_scope_from_seeds(self) -> TargetConfig:
+        if self.include_domains:
+            return self
+        derived: set[str] = set()
+        for seed in self.seeds:
+            candidate = seed if "://" in seed else f"https://{seed}"
+            hostname = urlsplit(candidate).hostname
+            if not hostname:
+                raise ValueError(f"cannot derive a hostname from target seed: {seed}")
+            try:
+                derived.add(hostname.rstrip(".").lower().encode("idna").decode("ascii"))
+            except UnicodeError as exc:
+                raise ValueError(f"invalid hostname in target seed: {seed}") from exc
+        self.include_domains = sorted(derived)
+        return self
 
     @field_validator("allowed_ports")
     @classmethod
@@ -57,7 +75,7 @@ class ScanConfig(BaseModel):
     concurrency: int = Field(default=4, ge=1, le=50)
     requests_per_second: float = Field(default=1.5, gt=0, le=50)
     timeout_seconds: float = Field(default=12, gt=0, le=120)
-    user_agent: str = "AegisBountyAI/0.1 authorized-security-research"
+    user_agent: str = "AegisBountyAI/0.3 authorized-security-research"
     active_validation: bool = False
     discover_subdomains: bool = False
     use_nuclei: bool = False
