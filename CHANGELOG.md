@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0 — 2026-07-23
+
+- Add automatic DNS, address, provider, TLS certificate, protocol, cipher, and public-key mapping for authorized hosts.
+- Add a coverage gap analysis and requested-tool coverage ledger to JSON, Markdown, and HTML reports.
+- Add network-derived observations for certificate verification, expiration, legacy protocols, weak signatures, and undersized RSA keys.
+- Prevent unrelated PostgreSQL and error-monitoring prose from being classified as a database error.
+- Continue to keep broad orchestrators, payload corpora, and intrusive scanners outside automatic execution.
+
 ## 0.4.0 — 2026-07-23
 
 - Add `aegis scan-url URL` for direct scanning without YAML editing.

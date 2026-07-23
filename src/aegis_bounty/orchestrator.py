@@ -9,9 +9,11 @@ from urllib.parse import urlsplit
 from aegis_bounty.chains import ChainEngine
 from aegis_bounty.config import AppConfig
 from aegis_bounty.crawler import Crawler
+from aegis_bounty.gap_analysis import build_gap_analysis
 from aegis_bounty.http_client import SafeHttpClient
 from aegis_bounty.llm import OpenAITriage
 from aegis_bounty.models import ScanSummary
+from aegis_bounty.network import NetworkMapper
 from aegis_bounty.recon import NucleiAdapter, ReconEngine
 from aegis_bounty.reporting import write_reports
 from aegis_bounty.scope import ScopePolicy
@@ -44,6 +46,8 @@ class ScanOrchestrator:
             "subdomain_discovery": self.config.scan.discover_subdomains,
             "nuclei": self.config.scan.use_nuclei,
             "ai": self.config.ai.enabled,
+            "network_mapping": True,
+            "gap_analysis": True,
         }
 
     async def run(self, *, disable_ai: bool = False) -> ScanSummary:
@@ -72,6 +76,18 @@ class ScanOrchestrator:
             for asset in assets:
                 if asset.hostname not in seeded_hosts:
                     seeds.append(f"https://{asset.hostname}/")
+
+            network_mapper = NetworkMapper(
+                timeout_seconds=self.config.scan.timeout_seconds,
+                concurrency=min(self.config.scan.concurrency, 8),
+            )
+            network_profiles, network_items, network_errors = await network_mapper.map(
+                assets, seeds
+            )
+            for profile in network_profiles:
+                store.add_network_profile(scan_id, profile)
+            store.add_observations(scan_id, network_items)
+            errors.extend(network_errors)
 
             async with SafeHttpClient(
                 self.scope,
@@ -120,6 +136,16 @@ class ScanOrchestrator:
 
             chains = ChainEngine().build(observations)
             store.add_chains(scan_id, chains)
+            gap_analysis = build_gap_analysis(
+                self.config,
+                endpoints=crawl.endpoints,
+                request_count=len(store.exchanges(scan_id)),
+                network_profiles=network_profiles,
+                observations=observations,
+                errors=crawl.errors,
+                ai_disabled=disable_ai,
+            )
+            store.add_gap_analysis(scan_id, gap_analysis)
             if errors:
                 (run_directory / "errors.log").write_text(
                     "\n".join(errors) + "\n", encoding="utf-8"
@@ -137,6 +163,8 @@ class ScanOrchestrator:
                 requests=len(store.exchanges(scan_id)),
                 observations=len(store.observations(scan_id)),
                 chains=len(chains),
+                network_hosts=len(network_profiles),
+                coverage_score=gap_analysis.coverage_score,
                 report_paths=[str(path.resolve()) for path in paths],
             )
         finally:

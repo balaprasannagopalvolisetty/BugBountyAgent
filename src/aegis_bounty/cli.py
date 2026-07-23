@@ -100,7 +100,8 @@ def _run_orchestrator(orchestrator: ScanOrchestrator, parsed: AppConfig, no_ai: 
     console.print(f"[bold green]Completed scan {summary.scan_id}[/bold green]")
     console.print(
         f"Assets {summary.assets} | Endpoints {summary.endpoints} | Requests {summary.requests} | "
-        f"Observations {summary.observations} | Chain hypotheses {summary.chains}"
+        f"Network hosts {summary.network_hosts} | Observations {summary.observations} | "
+        f"Chain hypotheses {summary.chains} | Coverage {summary.coverage_score}%"
     )
     for path in summary.report_paths:
         console.print(f"  {path}")
@@ -159,7 +160,7 @@ def init_target(
             "concurrency": 4,
             "requests_per_second": 1.5,
             "timeout_seconds": 12,
-            "user_agent": "AegisBountyAI/0.4 authorized-security-research",
+            "user_agent": "AegisBountyAI/0.5 authorized-security-research",
             "active_validation": False,
             "discover_subdomains": False,
             "use_nuclei": False,

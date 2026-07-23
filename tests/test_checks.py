@@ -40,6 +40,25 @@ def test_detects_stack_trace_and_technology_disclosure() -> None:
     assert any(item.kind == "technology_disclosure" for item in items)
 
 
+def test_database_technology_and_unrelated_error_text_is_not_a_database_error() -> None:
+    items = analyze_exchange(
+        exchange(
+            body_preview=(
+                "We use managed PostgreSQL for application data. "
+                "Sentry provides error monitoring and performance diagnostics."
+            )
+        )
+    )
+    assert not any(item.kind == "information_disclosure" for item in items)
+
+
+def test_detects_specific_postgresql_error_signature() -> None:
+    items = analyze_exchange(
+        exchange(body_preview="PostgreSQL query error: relation users does not exist")
+    )
+    assert any(item.title == "Response contains database error" for item in items)
+
+
 def test_static_javascript_does_not_get_document_header_noise() -> None:
     items = analyze_exchange(
         exchange(

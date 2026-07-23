@@ -41,6 +41,15 @@ class Exploitability(StrEnum):
     CONFIRMED = "confirmed"
 
 
+class CoverageStatus(StrEnum):
+    COVERED = "covered"
+    PARTIAL = "partial"
+    NOT_RUN = "not-run"
+    UNAVAILABLE = "unavailable"
+    EXCLUDED = "excluded"
+    REFERENCE = "reference"
+
+
 class Observation(BaseModel):
     kind: str
     title: str
@@ -97,6 +106,57 @@ class Asset(BaseModel):
     addresses: list[str] = Field(default_factory=list)
 
 
+class TLSProfile(BaseModel):
+    port: int = 443
+    verified: bool = False
+    verification_error: str | None = None
+    protocol: str | None = None
+    cipher: str | None = None
+    alpn_protocol: str | None = None
+    subject: str | None = None
+    issuer: str | None = None
+    san_dns_names: list[str] = Field(default_factory=list)
+    not_before: datetime | None = None
+    not_after: datetime | None = None
+    serial_number: str | None = None
+    signature_hash: str | None = None
+    public_key_type: str | None = None
+    public_key_bits: int | None = None
+    certificate_sha256: str | None = None
+
+
+class NetworkProfile(BaseModel):
+    hostname: str
+    addresses: list[str] = Field(default_factory=list)
+    dns_records: dict[str, list[str]] = Field(default_factory=dict)
+    provider_hints: list[str] = Field(default_factory=list)
+    tls: list[TLSProfile] = Field(default_factory=list)
+
+
+class CoverageGap(BaseModel):
+    area: str
+    status: CoverageStatus
+    priority: Severity = Severity.INFO
+    evidence: str
+    recommendation: str
+
+
+class ToolCoverage(BaseModel):
+    slug: str
+    name: str
+    status: CoverageStatus
+    installed: bool = False
+    evidence: str
+
+
+class GapAnalysis(BaseModel):
+    coverage_score: int = Field(ge=0, le=100)
+    covered_areas: int
+    total_areas: int
+    gaps: list[CoverageGap] = Field(default_factory=list)
+    tools: list[ToolCoverage] = Field(default_factory=list)
+
+
 class ChainHypothesis(BaseModel):
     title: str
     observation_ids: list[str]
@@ -116,4 +176,6 @@ class ScanSummary(BaseModel):
     requests: int
     observations: int
     chains: int
+    network_hosts: int = 0
+    coverage_score: int = 0
     report_paths: list[str] = Field(default_factory=list)

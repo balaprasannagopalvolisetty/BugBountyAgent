@@ -4,7 +4,14 @@ import json
 import sqlite3
 from pathlib import Path
 
-from aegis_bounty.models import Asset, ChainHypothesis, HttpExchange, Observation
+from aegis_bounty.models import (
+    Asset,
+    ChainHypothesis,
+    GapAnalysis,
+    HttpExchange,
+    NetworkProfile,
+    Observation,
+)
 
 SCHEMA = """
 PRAGMA journal_mode=WAL;
@@ -37,6 +44,16 @@ CREATE TABLE IF NOT EXISTS chains (
     chain_index INTEGER NOT NULL,
     data TEXT NOT NULL,
     PRIMARY KEY (scan_id, chain_index)
+);
+CREATE TABLE IF NOT EXISTS network_profiles (
+    scan_id TEXT NOT NULL,
+    hostname TEXT NOT NULL,
+    data TEXT NOT NULL,
+    PRIMARY KEY (scan_id, hostname)
+);
+CREATE TABLE IF NOT EXISTS gap_analyses (
+    scan_id TEXT PRIMARY KEY,
+    data TEXT NOT NULL
 );
 """
 
@@ -101,6 +118,20 @@ class EvidenceStore:
         )
         self.connection.commit()
 
+    def add_network_profile(self, scan_id: str, profile: NetworkProfile) -> None:
+        self.connection.execute(
+            "INSERT OR REPLACE INTO network_profiles VALUES (?, ?, ?)",
+            (scan_id, profile.hostname, profile.model_dump_json()),
+        )
+        self.connection.commit()
+
+    def add_gap_analysis(self, scan_id: str, analysis: GapAnalysis) -> None:
+        self.connection.execute(
+            "INSERT OR REPLACE INTO gap_analyses VALUES (?, ?)",
+            (scan_id, analysis.model_dump_json()),
+        )
+        self.connection.commit()
+
     def observations(self, scan_id: str) -> list[Observation]:
         rows = self.connection.execute(
             "SELECT data FROM observations WHERE scan_id = ? ORDER BY fingerprint", (scan_id,)
@@ -124,6 +155,18 @@ class EvidenceStore:
             "SELECT data FROM chains WHERE scan_id = ? ORDER BY chain_index", (scan_id,)
         ).fetchall()
         return [ChainHypothesis.model_validate_json(row[0]) for row in rows]
+
+    def network_profiles(self, scan_id: str) -> list[NetworkProfile]:
+        rows = self.connection.execute(
+            "SELECT data FROM network_profiles WHERE scan_id = ? ORDER BY hostname", (scan_id,)
+        ).fetchall()
+        return [NetworkProfile.model_validate_json(row[0]) for row in rows]
+
+    def gap_analysis(self, scan_id: str) -> GapAnalysis | None:
+        row = self.connection.execute(
+            "SELECT data FROM gap_analyses WHERE scan_id = ?", (scan_id,)
+        ).fetchone()
+        return GapAnalysis.model_validate_json(row[0]) if row else None
 
     def latest_scan_id(self) -> str:
         row = self.connection.execute(
@@ -149,6 +192,14 @@ class EvidenceStore:
             "exchanges": [item.model_dump(mode="json") for item in self.exchanges(scan_id)],
             "observations": [item.model_dump(mode="json") for item in self.observations(scan_id)],
             "chains": [item.model_dump(mode="json") for item in self.chains(scan_id)],
+            "network_profiles": [
+                item.model_dump(mode="json") for item in self.network_profiles(scan_id)
+            ],
+            "gap_analysis": (
+                analysis.model_dump(mode="json")
+                if (analysis := self.gap_analysis(scan_id))
+                else None
+            ),
         }
 
     def export_json(self, scan_id: str) -> str:

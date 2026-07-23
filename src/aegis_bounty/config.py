@@ -75,7 +75,7 @@ class ScanConfig(BaseModel):
     concurrency: int = Field(default=4, ge=1, le=50)
     requests_per_second: float = Field(default=1.5, gt=0, le=50)
     timeout_seconds: float = Field(default=12, gt=0, le=120)
-    user_agent: str = "AegisBountyAI/0.4 authorized-security-research"
+    user_agent: str = "AegisBountyAI/0.5 authorized-security-research"
     active_validation: bool = False
     discover_subdomains: bool = False
     use_nuclei: bool = False

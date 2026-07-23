@@ -22,7 +22,10 @@ DISCLOSURE_PATTERNS = {
         r"(?i)(traceback \(most recent call last\)|\bat [\w.$]+\([\w.]+:\d+\))"
     ),
     "database error": re.compile(
-        r"(?i)(sql syntax.*mysql|postgresql.*error|ora-\d{5}|sqlite[_ ]error)"
+        r"(?is)(you have an error in your sql syntax.{0,160}(?:mysql|mariadb)"
+        r"|postgres(?:ql)?(?:\s+(?:query|database|driver))?\s+(?:error|exception)\b"
+        r"|psycopg\d*(?:\.[\w]+)*\.(?:error|\w+error)\b"
+        r"|sqlstate\[[0-9a-z]{5}\]|ora-\d{5}\b|sqlite(?:3)?(?:error|exception|\s+error)\b)"
     ),
     "debug mode": re.compile(r"(?i)(werkzeug debugger|django debug|debug mode is on)"),
     "private key": re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
