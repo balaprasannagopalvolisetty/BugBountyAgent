@@ -127,6 +127,27 @@ python -m mypy src
 python -m pytest --cov=aegis_bounty --cov-report=term-missing
 ```
 
+## Claude Code AI help
+
+The repository includes a project `CLAUDE.md`, guarded `.claude/settings.json`, and two project skills. Claude Code receives the architecture, development workflow, evidence standards, and safety classifications automatically when started from the repository root.
+
+On Kali Linux, install Claude Code and open this repository:
+
+```bash
+curl -fsSL https://claude.ai/install.sh | bash
+cd ~/Desktop/BugBountyAgent
+claude
+```
+
+Inside Claude Code, use:
+
+```text
+/aegis-report runs/<scan-id>/report.json
+/aegis-tool-plan runs/<scan-id>/report.json
+```
+
+The shared permissions allow tests, linting, type checking, read-only Git inspection, configuration validation, and tool-catalog inspection. They deny autonomous scan commands, external scanner execution, Git pushes, secret files, and modification of generated evidence. Run authorized scans yourself in a separate terminal, then ask Claude to analyze the resulting report.
+
 ## Safety model
 
 A configuration file is not a substitute for permission. Only test systems you own or have explicit authorization to assess. Keep the program rules, safe-harbor terms, scope reference, test accounts, rate caps, and prohibited techniques with the engagement record. Stop when a target behaves unexpectedly or the program asks you to stop.

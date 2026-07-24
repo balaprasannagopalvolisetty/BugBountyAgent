@@ -7,6 +7,7 @@
 - Add network-derived observations for certificate verification, expiration, legacy protocols, weak signatures, and undersized RSA keys.
 - Prevent unrelated PostgreSQL and error-monitoring prose from being classified as a database error.
 - Continue to keep broad orchestrators, payload corpora, and intrusive scanners outside automatic execution.
+- Add Claude Code project instructions, guarded permissions, and report/tool-planning AI skills.
 
 ## 0.4.0 — 2026-07-23
 
