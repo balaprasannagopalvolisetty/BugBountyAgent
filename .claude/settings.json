@@ -22,7 +22,6 @@
       "Edit(./runs/**)",
       "Write(./runs/**)",
       "Bash(aegis scan *)",
-      "Bash(aegis scan-url *)",
       "Bash(python -m aegis_bounty scan *)",
       "Bash(python -m aegis_bounty scan-url *)",
       "Bash(subfinder *)",

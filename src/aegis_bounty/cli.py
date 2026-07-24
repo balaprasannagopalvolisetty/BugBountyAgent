@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import json
 import os
 import shutil
@@ -74,7 +75,55 @@ def _prompt_and_save_authorization(hostname: str) -> AuthorizationProfile:
     return profile
 
 
-def _authorization_for(hostname: str, reauthorize: bool = False) -> AuthorizationProfile:
+def _save_supplied_authorization(
+    hostname: str,
+    reference: str | None,
+    authorized_by: str | None,
+    expires_at: str | None,
+    confirmed: bool,
+) -> AuthorizationProfile | None:
+    supplied = (reference, authorized_by, expires_at)
+    if not any(value is not None for value in supplied) and not confirmed:
+        return None
+    if not all(value is not None for value in supplied) or not confirmed:
+        console.print(
+            "[bold red]Authorization refused:[/bold red] Non-interactive setup requires "
+            "--authorization-reference, --authorized-by, --authorization-expires-at, and "
+            "--confirm-authorization together."
+        )
+        raise typer.Exit(2)
+    try:
+        authorization = AuthorizationConfig.model_validate(
+            {
+                "confirmed": True,
+                "reference": reference,
+                "authorized_by": authorized_by,
+                "expires_at": expires_at,
+            }
+        )
+    except ValidationError as exc:
+        console.print(f"[bold red]Authorization refused:[/bold red] {exc}")
+        raise typer.Exit(2) from exc
+    profile = AuthorizationProfile(hostname=hostname, authorization=authorization)
+    path = save_authorization(profile)
+    console.print(f"[green]Saved exact-host authorization profile:[/green] {path}")
+    return profile
+
+
+def _authorization_for(
+    hostname: str,
+    reauthorize: bool = False,
+    *,
+    reference: str | None = None,
+    authorized_by: str | None = None,
+    expires_at: str | None = None,
+    confirmed: bool = False,
+) -> AuthorizationProfile:
+    supplied = _save_supplied_authorization(
+        hostname, reference, authorized_by, expires_at, confirmed
+    )
+    if supplied is not None:
+        return supplied
     if not reauthorize:
         try:
             profile = load_authorization(hostname)
@@ -94,6 +143,15 @@ def _run_orchestrator(orchestrator: ScanOrchestrator, parsed: AppConfig, no_ai: 
     )
     try:
         summary = asyncio.run(orchestrator.run(disable_ai=no_ai))
+    except ModuleNotFoundError as exc:
+        if exc.name and (exc.name == "dns" or exc.name.startswith("cryptography")):
+            console.print(
+                f"[bold red]Missing runtime dependency:[/bold red] {exc.name}\n"
+                "Activate the project virtual environment and refresh it with:\n"
+                "  [cyan]python -m pip install -e '.[dev]'[/cyan]"
+            )
+            raise typer.Exit(2) from exc
+        raise
     except KeyboardInterrupt as exc:
         console.print("[yellow]Stopped by operator.[/yellow]")
         raise typer.Exit(130) from exc
@@ -212,6 +270,34 @@ def scan_url(
         bool,
         typer.Option("--reauthorize", help="Replace the stored authorization for this host."),
     ] = False,
+    authorization_reference: Annotated[
+        str | None,
+        typer.Option(
+            "--authorization-reference",
+            help="Program URL or written authorization reference for non-interactive setup.",
+        ),
+    ] = None,
+    authorized_by: Annotated[
+        str | None,
+        typer.Option(
+            "--authorized-by",
+            help="Authorizing program or organization for non-interactive setup.",
+        ),
+    ] = None,
+    authorization_expires_at: Annotated[
+        str | None,
+        typer.Option(
+            "--authorization-expires-at",
+            help="ISO 8601 authorization expiration for non-interactive setup.",
+        ),
+    ] = None,
+    confirm_authorization: Annotated[
+        bool,
+        typer.Option(
+            "--confirm-authorization",
+            help="Confirm explicit authorization when supplying metadata non-interactively.",
+        ),
+    ] = False,
 ) -> None:
     """Scan one URL directly, prompting for authorization only on first use."""
     try:
@@ -222,7 +308,14 @@ def scan_url(
     hostname = urlsplit(normalized).hostname
     if not hostname:
         raise typer.Exit(2)
-    profile = _authorization_for(hostname, reauthorize)
+    profile = _authorization_for(
+        hostname,
+        reauthorize,
+        reference=authorization_reference,
+        authorized_by=authorized_by,
+        expires_at=authorization_expires_at,
+        confirmed=confirm_authorization,
+    )
     parsed = AppConfig(
         project=hostname,
         target=TargetConfig(seeds=[normalized]),
@@ -253,6 +346,13 @@ def doctor() -> None:
     table.add_column("Capability")
     table.add_column("Status")
     table.add_column("Details")
+    for module, package in (("dns", "dnspython"), ("cryptography", "cryptography")):
+        available = importlib.util.find_spec(module) is not None
+        table.add_row(
+            package,
+            "ready" if available else "missing",
+            "Python runtime dependency" if available else "run: python -m pip install -e '.[dev]'",
+        )
     for executable in ("amass", "nuclei"):
         path = shutil.which(executable)
         table.add_row(executable, "ready" if path else "optional", path or "not installed")

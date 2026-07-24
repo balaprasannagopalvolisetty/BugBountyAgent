@@ -52,6 +52,46 @@ def test_scan_url_prompts_once_then_reuses_exact_host_profile(tmp_path: Path) ->
     assert "One-time authorization setup" not in second.stdout
 
 
+def test_scan_url_accepts_complete_noninteractive_authorization(tmp_path: Path) -> None:
+    env = {"AEGIS_CONFIG_HOME": str(tmp_path / "aegis-home")}
+    result = runner.invoke(
+        app,
+        [
+            "scan-url",
+            "https://vast.ai/",
+            "--dry-run",
+            "--authorization-reference",
+            "https://program.example/scope",
+            "--authorized-by",
+            "Example Security",
+            "--authorization-expires-at",
+            "2099-12-31T23:59:59Z",
+            "--confirm-authorization",
+        ],
+        env=env,
+    )
+    assert result.exit_code == 0
+    assert "Saved exact-host authorization profile" in result.stdout
+    assert "One-time authorization setup" not in result.stdout
+
+
+def test_scan_url_refuses_incomplete_noninteractive_authorization(tmp_path: Path) -> None:
+    env = {"AEGIS_CONFIG_HOME": str(tmp_path / "aegis-home")}
+    result = runner.invoke(
+        app,
+        [
+            "scan-url",
+            "https://vast.ai/",
+            "--dry-run",
+            "--authorization-reference",
+            "https://program.example/scope",
+        ],
+        env=env,
+    )
+    assert result.exit_code == 2
+    assert "Non-interactive setup requires" in result.stdout
+
+
 def test_stored_authorization_is_bound_to_exact_hostname(tmp_path: Path) -> None:
     env = {"AEGIS_CONFIG_HOME": str(tmp_path / "aegis-home")}
     answers = "program-ref\nExample Security\n2099-12-31T23:59:59Z\ny\n"

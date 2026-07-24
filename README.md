@@ -47,6 +47,16 @@ Copy-Item configs\example.yaml scope.yaml
 
 Fill in the actual program scope and authorization metadata. `authorization.confirmed` must be `true`, the reference and authorizer must be genuine, and the authorization must not be expired. Aegis refuses to scan otherwise. Do not use `--break-system-packages` on Kali; use the virtual environment.
 
+After pulling a release that adds Python dependencies, refresh the active virtual environment:
+
+```bash
+source .venv/bin/activate
+python -m pip install -e '.[dev]'
+aegis doctor
+```
+
+If `aegis doctor` reports that `dnspython` or `cryptography` is missing, the editable project was updated but its virtual-environment dependencies were not. The install command above repairs it without modifying Kali's system Python.
+
 ## Use
 
 Scan directly from one URL. On first use for a hostname, Aegis asks for the real authorization details in the terminal and stores them in `~/.aegis/authorizations/`. No YAML editing is required:
@@ -142,11 +152,14 @@ claude
 Inside Claude Code, use:
 
 ```text
+/aegis-scan https://vast.ai/
 /aegis-report runs/<scan-id>/report.json
 /aegis-tool-plan runs/<scan-id>/report.json
 ```
 
-The shared permissions allow tests, linting, type checking, read-only Git inspection, configuration validation, and tool-catalog inspection. They deny autonomous scan commands, external scanner execution, Git pushes, secret files, and modification of generated evidence. Run authorized scans yourself in a separate terminal, then ask Claude to analyze the resulting report.
+`/aegis-scan` is manual-only: Claude cannot select it autonomously. It asks for the target's real authorization reference, authorizing organization, expiration, and confirmation; refreshes the active virtual environment; runs the exact-host assessment; and analyzes the report in the same Claude session. The deterministic scan uses `--no-ai` because Claude Code itself performs the AI review afterward.
+
+The shared permissions allow tests, linting, type checking, read-only Git inspection, configuration validation, and tool-catalog inspection. They deny autonomous configuration-file scans, external scanner execution, Git pushes, secret files, and modification of generated evidence.
 
 ## Safety model
 

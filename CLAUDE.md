@@ -63,5 +63,6 @@ Before changing code:
 
 ## Claude Code skills
 
+- `/aegis-scan <https://authorized-target.example/>` is a user-invoked workflow that collects authorization metadata, refreshes the virtual environment, runs the exact-host scan, and analyzes its report. Never invoke it automatically.
 - `/aegis-report <report.json-or-report.md>` performs evidence-based report and gap analysis without network activity.
 - `/aegis-tool-plan <report.json-or-report.md>` recommends which registered capability can close a coverage gap without launching external tools.

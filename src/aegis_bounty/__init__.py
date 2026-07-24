@@ -5,6 +5,6 @@ from importlib.metadata import PackageNotFoundError, version
 try:
     __version__ = version("aegis-bounty-ai")
 except PackageNotFoundError:  # pragma: no cover - editable source tree
-    __version__ = "0.5.0"
+    __version__ = "0.5.1"
 
 __all__ = ["__version__"]

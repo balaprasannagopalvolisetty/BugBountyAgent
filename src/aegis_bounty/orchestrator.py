@@ -13,7 +13,6 @@ from aegis_bounty.gap_analysis import build_gap_analysis
 from aegis_bounty.http_client import SafeHttpClient
 from aegis_bounty.llm import OpenAITriage
 from aegis_bounty.models import ScanSummary
-from aegis_bounty.network import NetworkMapper
 from aegis_bounty.recon import NucleiAdapter, ReconEngine
 from aegis_bounty.reporting import write_reports
 from aegis_bounty.scope import ScopePolicy
@@ -76,6 +75,10 @@ class ScanOrchestrator:
             for asset in assets:
                 if asset.hostname not in seeded_hosts:
                     seeds.append(f"https://{asset.hostname}/")
+
+            # Imported at execution time so `aegis doctor` and CLI help can explain a
+            # stale virtual environment instead of failing during module import.
+            from aegis_bounty.network import NetworkMapper
 
             network_mapper = NetworkMapper(
                 timeout_seconds=self.config.scan.timeout_seconds,

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.1 — 2026-07-23
+
+- Add a manual-only `/aegis-scan` Claude Code workflow with non-interactive authorization metadata and dependency refresh.
+- Keep CLI help and `aegis doctor` available when network-mapping dependencies are missing.
+- Replace the `ModuleNotFoundError` traceback with an actionable virtual-environment repair message.
+
 ## 0.5.0 — 2026-07-23
 
 - Add automatic DNS, address, provider, TLS certificate, protocol, cipher, and public-key mapping for authorized hosts.
